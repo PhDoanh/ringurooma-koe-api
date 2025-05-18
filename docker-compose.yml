@@ -1,0 +1,50 @@
+version: '3'
+
+services:
+  app:
+    image: ${DOCKER_USERNAME}/ringurooma-speech-service:latest
+    container_name: ringurooma-speech-service
+    restart: always
+    expose:
+      - "3000"  # Chỉ expose trong mạng nội bộ, không ra bên ngoài
+    environment:
+      - NODE_ENV=production
+      - SPEECH_KEY=${SPEECH_KEY}
+      - SPEECH_REGION=${SPEECH_REGION}
+      - API_KEY=${API_KEY}
+    volumes:
+      - ./resources:/app/resources
+    networks:
+      - ringurooma-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: ringurooma-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - ringurooma-network
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    container_name: ringurooma-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - nginx
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  ringurooma-network:
+    driver: bridge
