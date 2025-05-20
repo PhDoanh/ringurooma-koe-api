@@ -6,6 +6,8 @@
 const express = require('express');
 const path = require('path');
 const http = require('http');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 const { config, validateConfig } = require('./config');
 
 // Kiểm tra cấu hình
@@ -22,8 +24,39 @@ const PORT = config.server.port;
 const server = http.createServer(app);
 
 // Middleware cơ bản
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(compression()); // Thêm nén dữ liệu để giảm băng thông
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+
+// Middleware theo dõi thời gian xử lý request
+app.use((req, res, next) => {
+	req.startTime = Date.now();
+
+	// Lưu thời gian xử lý khi response hoàn tất
+	res.on('finish', () => {
+		const processingTime = Date.now() - req.startTime;
+		console.log(`${req.method} ${req.originalUrl} - ${res.statusCode} - ${processingTime}ms`);
+	});
+
+	next();
+});
+
+// Cấu hình Rate Limiting
+const apiLimiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 phút
+	max: 100, // Giới hạn mỗi IP 100 request/15 phút
+	standardHeaders: true, // Trả về thông tin RateLimit trong header (X-RateLimit-*)
+	legacyHeaders: false, // Disable header `X-RateLimit-*`
+	message: { error: 'Quá nhiều request từ IP này, vui lòng thử lại sau' },
+	skip: (req) => {
+		// Bỏ qua giới hạn cho các IP nội bộ (ví dụ: 127.0.0.1)
+		const ip = req.ip || req.connection.remoteAddress;
+		return ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.');
+	}
+});
+
+// Áp dụng giới hạn tần suất cho tất cả API
+app.use('/api/', apiLimiter);
 
 // Cho phép CORS
 app.use((req, res, next) => {
@@ -35,6 +68,15 @@ app.use((req, res, next) => {
 		return res.sendStatus(200);
 	}
 
+	next();
+});
+
+// Thêm các security headers
+app.use((req, res, next) => {
+	res.header('X-Content-Type-Options', 'nosniff');
+	res.header('X-Frame-Options', 'DENY');
+	res.header('X-XSS-Protection', '1; mode=block');
+	res.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 	next();
 });
 
