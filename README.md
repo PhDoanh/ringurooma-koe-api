@@ -39,10 +39,16 @@ Tất cả API endpoints yêu cầu xác thực bằng API key thông qua header
 ### POST /api/speech-to-text
 
 - **Mô tả**: Chuyển đổi âm thanh thành văn bản
-- **Content-Type**: multipart/form-data
+- **Content-Type**: multipart/form-data hoặc application/json (nếu sử dụng base64)
 - **Tham số**:
-  - `audio`: File âm thanh (WAV) - *bắt buộc*
-  - `user_id`: ID người dùng - *tùy chọn*
+  - **Sử dụng file**:
+    - `audio`: File âm thanh (WAV) - *bắt buộc*
+    - `user_id`: ID người dùng - *tùy chọn*
+  - **Sử dụng base64**:
+    - `audio_base64`: Chuỗi base64 của âm thanh - *bắt buộc*
+    - `user_id`: ID người dùng - *tùy chọn*
+    - **Headers**:
+      - `X-Audio-Format`: `base64` - *bắt buộc*
 - **Giới hạn**: Kích thước file tối đa 10MB
 - **Phản hồi**: Văn bản được nhận dạng từ âm thanh
 - **Ví dụ phản hồi**:
@@ -57,11 +63,19 @@ Tất cả API endpoints yêu cầu xác thực bằng API key thông qua header
 ### POST /api/pronunciation-assessment
 
 - **Mô tả**: Đánh giá phát âm tiếng Nhật dựa trên âm thanh và văn bản tham chiếu
-- **Content-Type**: multipart/form-data
+- **Content-Type**: multipart/form-data hoặc application/json (nếu sử dụng base64)
 - **Tham số**:
-  - `audio`: File âm thanh (WAV) - *bắt buộc*
-  - `reference_text`: Văn bản tham chiếu tiếng Nhật - *bắt buộc*
-  - `user_id`: ID người dùng - *tùy chọn*
+  - **Sử dụng file**:
+    - `audio`: File âm thanh (WAV) - *bắt buộc*
+    - `reference_text`: Văn bản tham chiếu tiếng Nhật - *bắt buộc*
+    - `user_id`: ID người dùng - *tùy chọn*
+  - **Sử dụng base64**:
+    - `audio_base64`: Chuỗi base64 của âm thanh - *bắt buộc*
+    - `reference_text`: Văn bản tham chiếu tiếng Nhật - *bắt buộc*
+    - `user_id`: ID người dùng - *tùy chọn*
+    - **Headers**:
+      - `X-Audio-Format`: `base64` - *bắt buộc*
+      - `Content-Type`: `application/json` - *bắt buộc*
 - **Giới hạn**: Kích thước file tối đa 10MB
 - **Phản hồi**: Kết quả đánh giá chi tiết
 - **Ví dụ phản hồi**:
@@ -125,12 +139,17 @@ Tất cả API endpoints yêu cầu xác thực bằng API key thông qua header
 - **Mô tả**: Nhận dạng ý định từ văn bản hoặc âm thanh
 - **Content-Type**: multipart/form-data hoặc application/json
 - **Tham số**:
-  - Đầu vào là văn bản (application/json):
+  - **Đầu vào là văn bản** (application/json):
     - `text`: Văn bản cần nhận dạng ý định - *bắt buộc*
     - `user_id`: ID người dùng - *tùy chọn*
-  - Đầu vào là âm thanh (multipart/form-data):
+  - **Đầu vào là âm thanh** (multipart/form-data):
     - `audio`: File âm thanh (WAV) - *bắt buộc*
     - `user_id`: ID người dùng - *tùy chọn*
+  - **Đầu vào là âm thanh base64** (application/json):
+    - `audio_base64`: Chuỗi base64 của âm thanh - *bắt buộc*
+    - `user_id`: ID người dùng - *tùy chọn*
+    - **Headers**:
+      - `X-Audio-Format`: `base64` - *bắt buộc*
 - **Giới hạn**: Kích thước file tối đa 10MB (đối với đầu vào âm thanh)
 - **Phản hồi**: Kết quả nhận dạng ý định
 - **Ví dụ phản hồi**:
@@ -219,7 +238,7 @@ Sử dụng script `setup-ssl.sh` để thiết lập SSL với Let's Encrypt:
 
 ### cURL
 
-#### Chuyển đổi giọng nói thành văn bản
+#### Chuyển đổi giọng nói thành văn bản (sử dụng file)
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -228,13 +247,27 @@ curl -X POST \
   https://your-domain.com/api/speech-to-text
 ```
 
-#### Đánh giá phát âm
+#### Đánh giá phát âm (sử dụng file)
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
   -F "audio=@/path/to/audio.wav" \
   -F "reference_text=こんにちは、私の名前は田中です。" \
   -F "user_id=test-user" \
+  https://your-domain.com/api/pronunciation-assessment
+```
+
+#### Đánh giá phát âm (sử dụng base64)
+```bash
+curl -X POST \
+  -H "X-API-Key: your_api_key" \
+  -H "Content-Type: application/json" \
+  -H "X-Audio-Format: base64" \
+  -d '{
+    "audio_base64": "UklGRiSFAABXQVZFLAAAAAA=...",
+    "reference_text": "こんにちは、私の名前は田中です。",
+    "user_id": "test-user"
+  }' \
   https://your-domain.com/api/pronunciation-assessment
 ```
 
@@ -246,6 +279,28 @@ curl -X POST \
   -d '{"text":"こんにちは、私の名前は田中です。", "voice_name":"ja-JP-NanamiNeural"}' \
   --output speech.mp3 \
   https://your-domain.com/api/text-to-speech
+```
+
+#### Nhận dạng ý định từ văn bản
+```bash
+curl -X POST \
+  -H "X-API-Key: your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"こんにちは、初めまして。お願いします。", "user_id":"test-user"}' \
+  https://your-domain.com/api/intent-recognition
+```
+
+#### Nhận dạng ý định từ âm thanh base64
+```bash
+curl -X POST \
+  -H "X-API-Key: your_api_key" \
+  -H "Content-Type: application/json" \
+  -H "X-Audio-Format: base64" \
+  -d '{
+    "audio_base64": "UklGRiSFAABXQVZFLAAAAAA=...",
+    "user_id": "test-user"
+  }' \
+  https://your-domain.com/api/intent-recognition
 ```
 
 ## Yêu cầu
@@ -265,7 +320,13 @@ node test-api.js --all
 # Kiểm thử từng API riêng biệt
 node test-api.js --stt           # Speech to Text
 node test-api.js --pronunciation # Pronunciation Assessment
+node test-api.js --pronunciation-base64 # Pronunciation Assessment với base64
 node test-api.js --tts           # Text to Speech
 node test-api.js --intent        # Intent Recognition
 node test-api.js --realtime      # Real-time Speech Recognition (WebSocket)
 ```
+
+## Tài nguyên
+
+- [Tài liệu Azure Speech SDK](https://learn.microsoft.com/en-us/javascript/api/microsoft-cognitiveservices-speech-sdk/)
+- [Hướng dẫn Pronunciation Assessment API](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-speech-to-text#pronunciation-assessment-parameters)
