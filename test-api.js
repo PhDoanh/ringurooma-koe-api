@@ -31,6 +31,7 @@ function showMenu() {
 	console.log('4. Kiểm thử nhận dạng ý định (Intent Recognition)');
 	console.log('5. Kiểm thử nhận dạng giọng nói thời gian thực (Real-time STT)');
 	console.log('6. Kiểm thử tất cả API');
+	console.log('7. Kiểm thử đánh giá phát âm với đầu vào Base64');
 	console.log('0. Thoát');
 	console.log('=======================================');
 }
@@ -101,6 +102,49 @@ async function testPronunciationAssessment() {
 
 	} catch (error) {
 		handleApiError(error, 'đánh giá phát âm');
+		return null;
+	}
+}
+
+/**
+ * Kiểm thử API đánh giá phát âm với đầu vào base64
+ */
+async function testPronunciationAssessmentWithBase64() {
+	try {
+		console.log('\nBắt đầu kiểm thử API đánh giá phát âm với đầu vào base64...');
+
+		// Đọc file âm thanh và chuyển thành base64
+		const audioBuffer = fs.readFileSync(audioFilePath);
+		const base64Audio = audioBuffer.toString('base64');
+
+		console.log(`Đọc file: ${audioFilePath}`);
+		console.log(`Văn bản tham chiếu: ${referenceText}`);
+		console.log(`Kích thước chuỗi base64: ${base64Audio.length} ký tự`);
+
+		// Dữ liệu request
+		const requestData = {
+			audio_base64: base64Audio,
+			reference_text: referenceText,
+			user_id: 'test-user-001'
+		};
+
+		// Gửi request
+		const response = await axios.post(`${API_URL}/api/pronunciation-assessment`, requestData, {
+			headers: {
+				'Content-Type': 'application/json',
+				'X-API-Key': API_KEY,
+				'X-Audio-Format': 'base64'
+			}
+		});
+
+		// In kết quả
+		console.log('\nAPI đánh giá phát âm với đầu vào base64 hoạt động thành công!');
+		console.log('\nKết quả:');
+		console.log(JSON.stringify(response.data, null, 2));
+		return response.data;
+
+	} catch (error) {
+		handleApiError(error, 'đánh giá phát âm với đầu vào base64');
 		return null;
 	}
 }
@@ -297,6 +341,7 @@ async function testAllApis() {
 	// Kiểm thử lần lượt từng API
 	await testSpeechToText();
 	await testPronunciationAssessment();
+	await testPronunciationAssessmentWithBase64();
 	await testTextToSpeech();
 	await testIntentRecognition();
 	await testRealTimeSTT();
@@ -327,6 +372,9 @@ async function handleChoice(choice) {
 			break;
 		case '6':
 			await testAllApis();
+			break;
+		case '7':
+			await testPronunciationAssessmentWithBase64();
 			break;
 		case '0':
 			console.log('Thoát chương trình...');
@@ -372,6 +420,11 @@ async function main() {
 
 	if (process.argv.includes('--pronunciation')) {
 		await testPronunciationAssessment();
+		process.exit(0);
+	}
+
+	if (process.argv.includes('--pronunciation-base64')) {
+		await testPronunciationAssessmentWithBase64();
 		process.exit(0);
 	}
 
