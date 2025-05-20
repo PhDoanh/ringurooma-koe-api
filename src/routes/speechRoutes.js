@@ -42,25 +42,64 @@ function determineJlptLevel(pronunciationScore) {
 }
 
 /**
+ * Xử lý audio từ các nguồn khác nhau (file tải lên hoặc base64)
+ * @param {Object} req - Express request object
+ * @returns {Promise<{tempFilePath: string, cleanup: Function}>} - Đường dẫn tạm thời và hàm dọn dẹp
+ */
+async function processAudioInput(req) {
+	let tempFilePath = null;
+	let audioData = null;
+
+	// Kiểm tra header để xác định kiểu dữ liệu audio
+	const contentType = req.headers['content-type'] || '';
+	const isBase64 = req.headers['x-audio-format'] === 'base64';
+
+	if (isBase64 && req.body.audio_base64) {
+		// Xử lý nếu đầu vào là chuỗi base64
+		const base64Data = req.body.audio_base64;
+		try {
+			// Xóa phần prefix data:audio/xxx;base64, nếu có
+			const base64Buffer = base64Data.replace(/^data:audio\/\w+;base64,/, '');
+			audioData = Buffer.from(base64Buffer, 'base64');
+			tempFilePath = await audioUtils.saveBufferToTempFile(audioData, '.wav');
+		} catch (error) {
+			throw new Error(`Lỗi khi xử lý dữ liệu base64: ${error.message}`);
+		}
+	} else if (req.file) {
+		// Xử lý nếu đầu vào là file tải lên
+		audioData = req.file.buffer;
+		tempFilePath = await audioUtils.saveBufferToTempFile(audioData, '.wav');
+	} else {
+		throw new Error('Không tìm thấy dữ liệu âm thanh. Cung cấp file audio hoặc chuỗi base64.');
+	}
+
+	// Xác thực file âm thanh
+	await audioUtils.validateAudioFile(tempFilePath);
+
+	// Trả về đường dẫn tạm thời và hàm dọn dẹp
+	return {
+		tempFilePath,
+		cleanup: () => {
+			if (tempFilePath) {
+				audioUtils.removeTempFile(tempFilePath);
+			}
+		}
+	};
+}
+
+/**
  * Route POST /api/speech-to-text
  * Chuyển đổi âm thanh thành văn bản (transcribe)
  */
 router.post('/speech-to-text', apiAuth, upload.single('audio'), async (req, res) => {
-	let tempFilePath = null;
+	let audioProcessor = null;
 
 	try {
-		// Kiểm tra xem có file audio được gửi lên không
-		if (!req.file) {
-			return res.status(400).json({ error: 'Không tìm thấy file âm thanh' });
-		}
+		// Xử lý đầu vào audio (file hoặc base64)
+		audioProcessor = await processAudioInput(req);
+		const tempFilePath = audioProcessor.tempFilePath;
 
 		const userId = req.body.user_id || 'anonymous';
-
-		// Lưu file âm thanh vào thư mục tạm thời
-		tempFilePath = await audioUtils.saveBufferToTempFile(req.file.buffer, '.wav');
-
-		// Xác thực file âm thanh
-		await audioUtils.validateAudioFile(tempFilePath);
 
 		console.log(`Xử lý nhận dạng giọng nói cho người dùng: ${userId}`);
 
@@ -84,8 +123,8 @@ router.post('/speech-to-text', apiAuth, upload.single('audio'), async (req, res)
 		});
 	} finally {
 		// Xóa file tạm khi xử lý xong
-		if (tempFilePath) {
-			audioUtils.removeTempFile(tempFilePath);
+		if (audioProcessor) {
+			audioProcessor.cleanup();
 		}
 	}
 });
@@ -95,27 +134,20 @@ router.post('/speech-to-text', apiAuth, upload.single('audio'), async (req, res)
  * Đánh giá phát âm tiếng Nhật dựa trên âm thanh và văn bản tham chiếu
  */
 router.post('/pronunciation-assessment', apiAuth, upload.single('audio'), async (req, res) => {
-	let tempFilePath = null;
+	let audioProcessor = null;
 
 	try {
-		// Kiểm tra xem có file audio được gửi lên không
-		if (!req.file) {
-			return res.status(400).json({ error: 'Không tìm thấy file âm thanh' });
-		}
-
 		// Kiểm tra xem có văn bản tham chiếu không
 		if (!req.body.reference_text) {
 			return res.status(400).json({ error: 'Cần cung cấp văn bản tham chiếu (reference_text)' });
 		}
 
+		// Xử lý đầu vào audio (file hoặc base64)
+		audioProcessor = await processAudioInput(req);
+		const tempFilePath = audioProcessor.tempFilePath;
+
 		const userId = req.body.user_id || 'anonymous';
 		const referenceText = req.body.reference_text;
-
-		// Lưu file âm thanh vào thư mục tạm thời
-		tempFilePath = await audioUtils.saveBufferToTempFile(req.file.buffer, '.wav');
-
-		// Xác thực file âm thanh
-		await audioUtils.validateAudioFile(tempFilePath);
 
 		console.log(`Xử lý đánh giá phát âm cho người dùng: ${userId}`);
 		console.log(`Văn bản tham chiếu: ${referenceText}`);
@@ -188,8 +220,8 @@ router.post('/pronunciation-assessment', apiAuth, upload.single('audio'), async 
 		});
 	} finally {
 		// Xóa file tạm khi xử lý xong
-		if (tempFilePath) {
-			audioUtils.removeTempFile(tempFilePath);
+		if (audioProcessor) {
+			audioProcessor.cleanup();
 		}
 	}
 });
@@ -251,25 +283,26 @@ router.post('/text-to-speech', apiAuth, express.json(), async (req, res) => {
  * Nhận dạng ý định từ văn bản hoặc âm thanh
  */
 router.post('/intent-recognition', apiAuth, upload.single('audio'), async (req, res) => {
-	let tempFilePath = null;
+	let audioProcessor = null;
 
 	try {
 		const userId = req.body.user_id || 'anonymous';
 		let isAudio = false;
+		let tempFilePath = null;
 
 		// Xác định đầu vào là văn bản hay âm thanh
-		if (req.file) {
-			// Đầu vào là âm thanh
+		if (req.file || (req.headers['x-audio-format'] === 'base64' && req.body.audio_base64)) {
+		// Đầu vào là âm thanh (file hoặc base64)
 			isAudio = true;
-			tempFilePath = await audioUtils.saveBufferToTempFile(req.file.buffer, '.wav');
-			await audioUtils.validateAudioFile(tempFilePath);
+			audioProcessor = await processAudioInput(req);
+			tempFilePath = audioProcessor.tempFilePath;
 			console.log(`Xử lý nhận dạng ý định từ âm thanh cho người dùng: ${userId}`);
 		} else if (req.body.text) {
 			// Đầu vào là văn bản
 			console.log(`Xử lý nhận dạng ý định từ văn bản cho người dùng: ${userId}`);
 			console.log(`Văn bản: ${req.body.text}`);
 		} else {
-			return res.status(400).json({ error: 'Cần cung cấp âm thanh hoặc văn bản đầu vào (audio hoặc text)' });
+			return res.status(400).json({ error: 'Cần cung cấp âm thanh hoặc văn bản đầu vào (audio, audio_base64 hoặc text)' });
 		}
 
 		// Nhận dạng ý định
@@ -301,8 +334,8 @@ router.post('/intent-recognition', apiAuth, upload.single('audio'), async (req, 
 		});
 	} finally {
 		// Xóa file tạm khi xử lý xong
-		if (tempFilePath) {
-			audioUtils.removeTempFile(tempFilePath);
+		if (audioProcessor) {
+			audioProcessor.cleanup();
 		}
 	}
 });
@@ -312,13 +345,40 @@ router.post('/intent-recognition', apiAuth, upload.single('audio'), async (req, 
  * @param {http.Server} server - Máy chủ HTTP
  */
 function setupWebSocket(server) {
-	const wss = new WebSocket.Server({ server });
+	const wss = new WebSocket.Server({
+		server,
+		// Thêm cấu hình WebSocket
+		perMessageDeflate: true, // Bật nén dữ liệu
+		maxPayload: 5 * 1024 * 1024 // Giới hạn kích thước tin nhắn 5MB
+	});
 
-	wss.on('connection', (ws) => {
+	// Theo dõi số lượng kết nối
+	let connectionCount = 0;
+
+	wss.on('connection', (ws, req) => {
+		// Giới hạn số lượng kết nối đồng thời
+		connectionCount++;
+		if (connectionCount > 100) {
+			ws.close(1013, 'Quá nhiều kết nối đồng thời');
+			return;
+		}
+
+		// Thiết lập timeout 5 phút cho mỗi kết nối
+		const connectionTimeout = setTimeout(() => {
+			ws.close(1000, 'Timeout');
+		}, 5 * 60 * 1000);
+
 		console.log('Client kết nối WebSocket cho nhận dạng giọng nói thời gian thực');
+		console.log(`Số kết nối hiện tại: ${connectionCount}`);
 
 		let recognizer = null;
 		let pushStream = null;
+
+		// Triển khai cơ chế ping/pong để phát hiện mất kết nối
+		ws.isAlive = true;
+		ws.on('pong', () => {
+			ws.isAlive = true;
+		});
 
 		// Xử lý tin nhắn từ client
 		ws.on('message', (message) => {
@@ -385,8 +445,16 @@ function setupWebSocket(server) {
 				} else {
 					// Tin nhắn là dữ liệu âm thanh
 					if (pushStream) {
-						// Gửi dữ liệu âm thanh đến pushStream
-						pushStream.write(message);
+						try {
+							// Gửi dữ liệu âm thanh đến pushStream
+							pushStream.write(message);
+						} catch (err) {
+							console.error('Lỗi khi xử lý dữ liệu âm thanh:', err);
+							ws.send(JSON.stringify({
+								type: 'error',
+								message: 'Lỗi khi xử lý dữ liệu âm thanh'
+							}));
+						}
 					}
 				}
 			} catch (error) {
@@ -401,6 +469,8 @@ function setupWebSocket(server) {
 		// Xử lý sự kiện đóng kết nối
 		ws.on('close', () => {
 			console.log('Client ngắt kết nối WebSocket');
+			connectionCount--;
+			clearTimeout(connectionTimeout);
 
 			// Giải phóng tài nguyên
 			if (recognizer) {
@@ -412,6 +482,12 @@ function setupWebSocket(server) {
 			}
 		});
 
+		// Xử lý sự kiện lỗi
+		ws.on('error', (err) => {
+			console.error('Lỗi WebSocket:', err);
+			connectionCount--;
+		});
+
 		// Gửi thông báo kết nối thành công
 		ws.send(JSON.stringify({
 			type: 'status',
@@ -419,32 +495,38 @@ function setupWebSocket(server) {
 		}));
 	});
 
+	// Kiểm tra kết nối còn sống định kỳ
+	const interval = setInterval(() => {
+		wss.clients.forEach((ws) => {
+			if (ws.isAlive === false) return ws.terminate();
+			ws.isAlive = false;
+			ws.ping();
+		});
+	}, 30000);
+
+	wss.on('close', () => {
+		clearInterval(interval);
+	});
+
 	console.log('Đã thiết lập WebSocket cho nhận dạng giọng nói thời gian thực');
 }
 
 // Route để xử lý các yêu cầu xuống từ route gốc /evaluate-pronunciation để đảm bảo tương thích ngược
 router.post('/evaluate-pronunciation', apiAuth, upload.single('audio'), async (req, res) => {
-	let tempFilePath = null;
+	let audioProcessor = null;
 
 	try {
-		// Kiểm tra xem có file audio được gửi lên không
-		if (!req.file) {
-			return res.status(400).json({ error: 'Không tìm thấy file âm thanh' });
-		}
-
 		// Kiểm tra xem có văn bản tham chiếu không
 		if (!req.body.reference_text) {
 			return res.status(400).json({ error: 'Cần cung cấp văn bản tham chiếu (reference_text)' });
 		}
 
+		// Xử lý đầu vào audio (file hoặc base64)
+		audioProcessor = await processAudioInput(req);
+		const tempFilePath = audioProcessor.tempFilePath;
+
 		const userId = req.body.user_id || 'anonymous';
 		const referenceText = req.body.reference_text;
-
-		// Lưu file âm thanh vào thư mục tạm thời
-		tempFilePath = await audioUtils.saveBufferToTempFile(req.file.buffer, '.wav');
-
-		// Xác thực file âm thanh
-		await audioUtils.validateAudioFile(tempFilePath);
 
 		// Chuyển hướng đến API mới
 		const result = await new Promise((resolve, reject) => {
@@ -520,8 +602,8 @@ router.post('/evaluate-pronunciation', apiAuth, upload.single('audio'), async (r
 		});
 	} finally {
 		// Xóa file tạm khi xử lý xong
-		if (tempFilePath) {
-			audioUtils.removeTempFile(tempFilePath);
+		if (audioProcessor) {
+			audioProcessor.cleanup();
 		}
 	}
 });
