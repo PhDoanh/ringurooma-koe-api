@@ -102,7 +102,7 @@ class SpeechService {
 	/**
 	 * Đánh giá phát âm tiếng Nhật từ file âm thanh
 	 * @param {string} audioFilePath - Đường dẫn tới file âm thanh
-	 * @param {string} referenceText - Văn bản tham chiếu để đánh giá phát âm
+	 * @param {string} referenceText - Văn bản tham chiếu để đánh giá phát âm (optional for Speaking mode)
 	 * @returns {Promise<Object>} - Kết quả đánh giá phát âm
 	 */
 	async assessPronunciation(audioFilePath, referenceText) {
@@ -111,14 +111,18 @@ class SpeechService {
 			async () => {
 				return new Promise((resolve, reject) => {
 					try {
-						// Tạo cache key từ hash của file audio và reference text
+						// Xác định chế độ đánh giá: Reading (có referenceText) hoặc Speaking (không có referenceText)
+						const isReadingMode = referenceText && referenceText.trim().length > 0;
+						const mode = isReadingMode ? 'reading' : 'speaking';
+
+						// Tạo cache key từ hash của file audio và reference text (nếu có)
 						const audioHash = crypto.createHash('md5').update(fs.readFileSync(audioFilePath)).digest('hex');
-						const cacheKey = `pronunciation_${audioHash}_${referenceText}`;
+						const cacheKey = `pronunciation_${audioHash}_${mode}_${referenceText || ''}`;
 
 						// Kiểm tra cache
 						const cachedResult = resultCache.get(cacheKey);
 						if (cachedResult) {
-							console.log(`Cache hit for pronunciation assessment: ${cacheKey}`);
+							console.log(`Cache hit for pronunciation assessment (${mode} mode): ${cacheKey}`);
 							return resolve(cachedResult);
 						}
 
@@ -130,14 +134,19 @@ class SpeechService {
 
 						// Cấu hình đánh giá phát âm với thang điểm 100
 						const pronunciationConfig = new sdk.PronunciationAssessmentConfig(
-							referenceText,
-							sdk.PronunciationAssessmentGradingSystem.HundredMark, // Thay đổi sang thang điểm 100
-							sdk.PronunciationAssessmentGranularity.Phoneme, // Thay đổi sang mức độ phoneme để phân tích chi tiết hơn
-							true // enableMiscue - bật tính năng phát hiện lỗi phát âm
+							referenceText || "",  // Truyền chuỗi rỗng nếu không có referenceText
+							sdk.PronunciationAssessmentGradingSystem.HundredMark,
+							sdk.PronunciationAssessmentGranularity.Phoneme,
+							isReadingMode // enableMiscue chỉ cần thiết ở chế độ Reading
 						);
 
 						// Cấu hình thêm cho đánh giá ngữ điệu và nhịp điệu
 						pronunciationConfig.enableProsodyAssessment = true;
+
+						// Thiết lập scenarioId nếu là Speaking mode
+						if (!isReadingMode) {
+							pronunciationConfig.scenarioId = "conversation"; // Chế độ Speaking
+						}
 
 						// Tạo speech recognizer
 						const recognizer = new sdk.SpeechRecognizer(this.speechConfig, audioConfig);
@@ -163,11 +172,12 @@ class SpeechService {
 									pronunciationScore: pronunciationAssessmentResult.pronunciationScore,
 									accuracyScore: pronunciationAssessmentResult.accuracyScore,
 									fluencyScore: pronunciationAssessmentResult.fluencyScore,
-									completenessScore: pronunciationAssessmentResult.completenessScore,
+									completenessScore: isReadingMode ? pronunciationAssessmentResult.completenessScore : null, // Completeness chỉ có ý nghĩa trong Reading mode
 									prosodyScore: pronunciationAssessmentResult.prosodyScore || 0, // Điểm ngữ điệu
 									transcription: result.text,
 									words: [],
 									phonemes: [],
+									mode: mode, // Thêm thông tin về chế độ đánh giá
 									speechRate: {
 										processingTimeMs,
 										estimatedWordsPerMinute: this.calculateSpeechRate(result.text, processingTimeMs)
