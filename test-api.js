@@ -32,6 +32,7 @@ function showMenu() {
 	console.log('5. Kiểm thử nhận dạng giọng nói thời gian thực (Real-time STT)');
 	console.log('6. Kiểm thử tất cả API');
 	console.log('7. Kiểm thử đánh giá phát âm với đầu vào Base64');
+	console.log('8. Kiểm thử đánh giá phát âm ở chế độ Speaking (nói tự do)');
 	console.log('0. Thoát');
 	console.log('=======================================');
 }
@@ -350,6 +351,42 @@ async function testAllApis() {
 }
 
 /**
+ * Kiểm thử API đánh giá phát âm ở chế độ Speaking (không cần văn bản tham chiếu)
+ */
+async function testSpeakingModePronunciation() {
+	try {
+		console.log('\nBắt đầu kiểm thử API đánh giá phát âm ở chế độ Speaking (nói tự do)...');
+
+		// Tạo form data
+		const formData = new FormData();
+		formData.append('audio', fs.createReadStream(audioFilePath));
+		formData.append('user_id', 'test-user-001');
+		// Không cung cấp reference_text để kích hoạt chế độ Speaking
+
+		console.log(`Gửi file: ${audioFilePath}`);
+		console.log('Chế độ: Speaking (không có văn bản tham chiếu)');
+
+		// Gửi request
+		const response = await axios.post(`${API_URL}/api/pronunciation-assessment`, formData, {
+			headers: {
+				...formData.getHeaders(),
+				'X-API-Key': API_KEY
+			}
+		});
+
+		// In kết quả
+		console.log('\nAPI đánh giá phát âm ở chế độ Speaking hoạt động thành công!');
+		console.log('\nKết quả:');
+		console.log(JSON.stringify(response.data, null, 2));
+		return response.data;
+
+	} catch (error) {
+		handleApiError(error, 'đánh giá phát âm ở chế độ Speaking');
+		return null;
+	}
+}
+
+/**
  * Xử lý lựa chọn từ người dùng
  * @param {string} choice - Lựa chọn
  */
@@ -375,6 +412,9 @@ async function handleChoice(choice) {
 			break;
 		case '7':
 			await testPronunciationAssessmentWithBase64();
+			break;
+		case '8':
+			await testSpeakingModePronunciation();
 			break;
 		case '0':
 			console.log('Thoát chương trình...');
@@ -440,6 +480,11 @@ async function main() {
 
 	if (process.argv.includes('--realtime')) {
 		await testRealTimeSTT();
+		process.exit(0);
+	}
+
+	if (process.argv.includes('--speaking')) {
+		await testSpeakingModePronunciation();
 		process.exit(0);
 	}
 
