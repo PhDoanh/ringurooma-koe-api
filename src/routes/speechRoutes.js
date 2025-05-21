@@ -131,33 +131,67 @@ router.post('/speech-to-text', apiAuth, upload.single('audio'), async (req, res)
 
 /**
  * Route POST /api/pronunciation-assessment
- * Đánh giá phát âm tiếng Nhật dựa trên âm thanh và văn bản tham chiếu
+ * Đánh giá phát âm tiếng Nhật dựa trên âm thanh và văn bản tham chiếu (nếu có)
+ * Hỗ trợ cả chế độ Reading (có văn bản tham chiếu) và Speaking (không có văn bản tham chiếu)
  */
 router.post('/pronunciation-assessment', apiAuth, upload.single('audio'), async (req, res) => {
 	let audioProcessor = null;
 
 	try {
-		// Kiểm tra xem có văn bản tham chiếu không
-		if (!req.body.reference_text) {
-			return res.status(400).json({ error: 'Cần cung cấp văn bản tham chiếu (reference_text)' });
-		}
-
 		// Xử lý đầu vào audio (file hoặc base64)
 		audioProcessor = await processAudioInput(req);
 		const tempFilePath = audioProcessor.tempFilePath;
 
 		const userId = req.body.user_id || 'anonymous';
-		const referenceText = req.body.reference_text;
+		const referenceText = req.body.reference_text || "";
 
-		console.log(`Xử lý đánh giá phát âm cho người dùng: ${userId}`);
-		console.log(`Văn bản tham chiếu: ${referenceText}`);
+		// Xác định chế độ đánh giá dựa trên việc có văn bản tham chiếu hay không
+		const isReadingMode = referenceText && referenceText.trim().length > 0;
+		const mode = isReadingMode ? 'Reading' : 'Speaking';
 
-		// Xử lý song song: đánh giá phát âm, nhận dạng giọng nói, phân tích trọng âm
-		const [pronunciationResult, recognizedText, stressAnalysis] = await Promise.all([
+		console.log(`Xử lý đánh giá phát âm cho người dùng: ${userId} (chế độ: ${mode})`);
+		if (isReadingMode) {
+			console.log(`Văn bản tham chiếu: ${referenceText}`);
+		} else {
+			console.log(`Không có văn bản tham chiếu, sử dụng chế độ ${mode}`);
+		}
+
+		// Xử lý song song
+		const [pronunciationResult, recognizedText] = await Promise.all([
 			speechService.assessPronunciation(tempFilePath, referenceText),
-			speechService.recognizeSpeech(tempFilePath),
-			speechService.analyzeWordStress(tempFilePath, referenceText)
+			speechService.recognizeSpeech(tempFilePath)
 		]);
+
+		// Chỉ phân tích trọng âm nếu có văn bản tham chiếu
+		let stressAnalysis = null;
+		if (isReadingMode) {
+			stressAnalysis = await speechService.analyzeWordStress(tempFilePath, referenceText);
+		} else {
+			// Trong chế độ Speaking, tạo phân tích trọng âm từ kết quả pronunciation
+			stressAnalysis = {
+				overallStressScore: 0,
+				wordStressDetails: []
+			};
+
+			// Tính điểm trọng âm trung bình từ các từ đã nhận dạng
+			let totalStressScore = 0;
+			let wordCount = 0;
+
+			pronunciationResult.words.forEach(word => {
+				if (word.pronunciationAssessment && word.pronunciationAssessment.stressScore !== null) {
+					totalStressScore += word.pronunciationAssessment.stressScore;
+					wordCount++;
+
+					stressAnalysis.wordStressDetails.push({
+						word: word.word,
+						stressScore: word.pronunciationAssessment.stressScore,
+						isCorrectlyStressed: word.pronunciationAssessment.stressScore >= 80
+					});
+				}
+			});
+
+			stressAnalysis.overallStressScore = wordCount > 0 ? totalStressScore / wordCount : 0;
+		}
 
 		// Xác định cấp độ JLPT dựa trên điểm phát âm
 		const jlptLevel = determineJlptLevel(pronunciationResult.pronunciationScore);
@@ -166,21 +200,23 @@ router.post('/pronunciation-assessment', apiAuth, upload.single('audio'), async 
 		const strengthsWeaknesses = analysisService.analyzeStrengthsWeaknesses(pronunciationResult);
 
 		// Đánh giá tốc độ nói
-		const speechRateAnalysis = analysisService.analyzeSpeechRate(pronunciationResult.speechRate.estimatedWordsPerMinute);
+		const speechRateAnalysis = analysisService.analyzeSpeechRate(
+			pronunciationResult.speechRate.estimatedWordsPerMinute);
 
 		// Tổng hợp kết quả
 		const result = {
 			user_id: userId,
-			reference_text: referenceText,
+			assessment_mode: mode,
+			reference_text: isReadingMode ? referenceText : null,
 			transcription: {
-				fromRecognition: recognizedText,
+				text: recognizedText,
 				fromAssessment: pronunciationResult.transcription
 			},
 			jlpt_level: jlptLevel,
 			pronunciation_scores: {
 				accuracy: pronunciationResult.accuracyScore,
 				fluency: pronunciationResult.fluencyScore,
-				completeness: pronunciationResult.completenessScore,
+				completeness: pronunciationResult.completenessScore, // null trong chế độ Speaking
 				pronunciation: pronunciationResult.pronunciationScore,
 				prosody: pronunciationResult.prosodyScore // Điểm ngữ điệu
 			},
@@ -202,13 +238,15 @@ router.post('/pronunciation-assessment', apiAuth, upload.single('audio'), async 
 			timestamp: new Date().toISOString()
 		};
 
-		// Tính toán chênh lệch với điểm chuẩn (giả sử điểm chuẩn là 80)
-		const benchmark = 80;
-		result.benchmark_comparison = {
-			accuracy_vs_benchmark: (pronunciationResult.accuracyScore - benchmark).toFixed(2),
-			fluency_vs_benchmark: (pronunciationResult.fluencyScore - benchmark).toFixed(2),
-			overall_vs_benchmark: ((pronunciationResult.pronunciationScore - benchmark)).toFixed(2)
-		};
+		// Tính toán chênh lệch với điểm chuẩn (chỉ áp dụng cho Reading mode)
+		if (isReadingMode) {
+			const benchmark = 80;
+			result.benchmark_comparison = {
+				accuracy_vs_benchmark: (pronunciationResult.accuracyScore - benchmark).toFixed(2),
+				fluency_vs_benchmark: (pronunciationResult.fluencyScore - benchmark).toFixed(2),
+				overall_vs_benchmark: ((pronunciationResult.pronunciationScore - benchmark)).toFixed(2)
+			};
+		}
 
 		// Phản hồi kết quả đánh giá
 		res.json(result);
