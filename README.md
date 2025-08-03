@@ -1,6 +1,7 @@
-# Ringurooma Speech Service
+# Ringurooma Koe API
+> Orginal name: リングローマの音声API 
 
-Ringurooma Speech Service là một dịch vụ microservice xử lý và đánh giá kỹ năng nói tiếng Nhật, sử dụng Azure Speech Service SDK.
+Kho chứa này là một microservice trung gian, giao tiếp với Azure Speech Service SDK để xử lý và đánh giá kỹ năng nói tiếng Nhật, được phát triển độc lập bởi dự án [Ringurooma](https://github.com/HuyDang05/Ringurooma). Do đó, bất kỳ ứng dụng hỗ trợ REST API nào đều có thể sử dụng!
 
 ## Tính năng
 
