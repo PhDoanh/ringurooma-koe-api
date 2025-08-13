@@ -1,245 +1,262 @@
 # Ringurooma Koe API
+
 > Orginal name: リングローマの音声API 
 
-Kho chứa này là một microservice trung gian, giao tiếp với Azure Speech Service SDK để xử lý và đánh giá kỹ năng nói tiếng Nhật, được phát triển độc lập bởi dự án [Ringurooma](https://github.com/HuyDang05/Ringurooma). Do đó, bất kỳ ứng dụng hỗ trợ REST API nào đều có thể sử dụng!
+This repository is an intermediate microservice, communicating with the Azure Speech SDK for processing and assessing Japanese speaking skills, independently developed by the [Ringurooma](https://github.com/HuyDang05/Ringurooma) project. Therefore, any application that supports the REST API can use it!
 
-## Tính năng
+## Feature
 
-- **Chuyển đổi giọng nói thành văn bản**: Nhận dạng và chuyển đổi giọng nói tiếng Nhật thành văn bản
-- **Đánh giá phát âm**: Đánh giá độ chính xác phát âm tiếng Nhật theo thang điểm 100
-- **Phân tích ngữ điệu và âm điệu**: Đánh giá độ tự nhiên của ngữ điệu khi nói tiếng Nhật
-- **Đánh giá tốc độ nói**: Phân tích và đánh giá tốc độ nói có phù hợp hay không
-- **Phân tích trọng âm từ vựng**: Đánh giá việc đặt trọng âm đúng vị trí trong từ
-- **Phân tích điểm mạnh, điểm yếu**: Xác định điểm mạnh, điểm yếu trong kỹ năng nói
-- **Đề xuất cải thiện**: Đưa ra các gợi ý để cải thiện kỹ năng nói tiếng Nhật
+- **Speech to Text**: Recognize and convert Japanese speech to text
+- **Pronunciation Assessment**: Japanese pronunciation accuracy assessment on a 100-point scale
+- **Intonation and Tone Analysis**: Assessing the naturalness of intonation when speaking Japanese
+- **Speaking speed assessment**: Analyze and evaluate whether the speaking speed is appropriate or not
+- **Vocabulary Accent Analysis**: Evaluate the correct placement of accents in words
+- **Strengths and weaknesses analysis**: Identify strengths and weaknesses in speaking skills
+- **Suggestions for improvement**: Give suggestions to improve your Japanese speaking skills
 
 ## API Endpoints
 
-Tất cả API endpoints yêu cầu xác thực bằng API key thông qua header `X-API-Key` hoặc query parameter `api_key`.
+All API endpoints require authentication with an API key via the `X-API-Key` header or query parameter `api_key`.
 
-### GET /
+### GET `/`
 
-- **Mô tả**: Kiểm tra trạng thái hoạt động của máy chủ
-- **Phản hồi**: Thông tin về phiên bản và trạng thái
-- **Ví dụ phản hồi**:
-  ```json
-  {
-    "message": "Ringurooma Speech API Server",
-    "version": "1.0.0",
-    "status": "running",
-    "features": [
-      "Speech to Text (POST /api/speech-to-text)",
-      "Real-time Speech to Text (WebSocket)",
-      "Pronunciation Assessment (POST /api/pronunciation-assessment)",
-      "Text to Speech (POST /api/text-to-speech)",
-      "Intent Recognition (POST /api/intent-recognition)"
-    ]
-  }
-  ```
+- **Description**: Check the operating status of the server
+- **Response**: Version and status information
+- **Example response**:
 
-### POST /api/speech-to-text
+```json
+{
+  "message": "Ringurooma Speech API Server",
+  "version": "1.0.0",
+  "status": "running",
+  "features": [
+    "Speech to Text (POST /api/speech-to-text)",
+    "Real-time Speech to Text (WebSocket)",
+    "Pronunciation Assessment (POST /api/pronunciation-assessment)",
+    "Text to Speech (POST /api/text-to-speech)",
+    "Intent Recognition (POST /api/intent-recognition)"
+  ]
+}
+```
 
-- **Mô tả**: Chuyển đổi âm thanh thành văn bản
-- **Content-Type**: multipart/form-data hoặc application/json (nếu sử dụng base64)
-- **Tham số**:
-  - **Sử dụng file**:
-    - `audio`: File âm thanh (WAV) - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-  - **Sử dụng base64**:
-    - `audio_base64`: Chuỗi base64 của âm thanh - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-    - **Headers**:
-      - `X-Audio-Format`: `base64` - *bắt buộc*
-- **Giới hạn**: Kích thước file tối đa 10MB
-- **Phản hồi**: Văn bản được nhận dạng từ âm thanh
-- **Ví dụ phản hồi**:
-  ```json
-  {
-    "user_id": "test-user-001",
-    "transcription": "こんにちは、私の名前は田中です。",
-    "timestamp": "2025-05-18T07:31:28.123Z"
-  }
-  ```
+### POST `/api/speech-to-text`
 
-### POST /api/pronunciation-assessment
+- **Description**: Convert audio to text
+- **Content-Type**: `multipart/form-data` or `application/json` (if using base64)
+- **Parameters**:
+	- **File Usage**:
+		- `audio`: Audio file (WAV) - *required*
+		- `user_id`: User ID - *optional*
+	- **Using base64**:
+		- `audio_base64`: Base64 string of audio - *required*
+		- `user_id`: User ID - *optional*
+		- **Headers**:
+			- `X-Audio-Format`: `base64` - *required*
+- **Limit**: Maximum file size 10MB
+- **Response**: Text recognized from audio
+- **Example response**:
 
-- **Mô tả**: Đánh giá phát âm tiếng Nhật dựa trên âm thanh và văn bản tham chiếu
-- **Content-Type**: multipart/form-data hoặc application/json (nếu sử dụng base64)
-- **Tham số**:
-  - **Sử dụng file**:
-    - `audio`: File âm thanh (WAV) - *bắt buộc*
-    - `reference_text`: Văn bản tham chiếu tiếng Nhật - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-  - **Sử dụng base64**:
-    - `audio_base64`: Chuỗi base64 của âm thanh - *bắt buộc*
-    - `reference_text`: Văn bản tham chiếu tiếng Nhật - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-    - **Headers**:
-      - `X-Audio-Format`: `base64` - *bắt buộc*
-      - `Content-Type`: `application/json` - *bắt buộc*
-- **Giới hạn**: Kích thước file tối đa 10MB
-- **Phản hồi**: Kết quả đánh giá chi tiết
-- **Ví dụ phản hồi**:
-  ```json
-  {
-    "user_id": "test-user-001",
-    "reference_text": "こんにちは、私の名前は田中です。",
-    "transcription": {
-      "fromRecognition": "こんにちは、私の名前は田中です。",
-      "fromAssessment": "こんにちは、私の名前は田中です。"
-    },
-    "jlpt_level": "N3",
-    "pronunciation_scores": {
-      "accuracy": 85.7,
-      "fluency": 79.3,
-      "completeness": 95.0,
-      "pronunciation": 82.5,
-      "prosody": 75.2
-    },
-    "speech_rate": {
-      "words_per_minute": 120,
-      "assessment": {
-        "rating": "good",
-        "feedback": "Tốc độ nói phù hợp, gần với tốc độ nói tự nhiên của người bản xứ."
-      }
-    },
-    "word_stress": {
-      "overall_score": 76.5,
-      "details": [...]
-    },
-    "analysis": {
-      "strengths": ["Phát âm chính xác các từ vựng", "Nói đầy đủ nội dung so với văn bản tham chiếu"],
-      "weaknesses": ["Ngữ điệu chưa tự nhiên, còn đơn điệu"],
-      "improvement_suggestions": ["Nghe và bắt chước ngữ điệu của người bản xứ, tập trung vào cao độ và trọng âm"]
-    },
-    "word_details": [...],
-    "phoneme_details": [...],
-    "benchmark_comparison": {
-      "accuracy_vs_benchmark": "5.70",
-      "fluency_vs_benchmark": "-0.70",
-      "overall_vs_benchmark": "2.50"
-    },
-    "timestamp": "2025-05-18T07:31:28.123Z"
-  }
-  ```
+```json
+{
+  "user_id": "test-user-001",
+  "transcription": "こんにちは、私の名前は田中です。",
+  "timestamp": "2025-05-18T07:31:28.123Z"
+}
+```
 
-### POST /api/text-to-speech
+### POST `/api/pronunciation-assessment`
 
-- **Mô tả**: Chuyển đổi văn bản thành giọng nói
-- **Content-Type**: application/json
-- **Tham số**:
-  - `text`: Văn bản cần chuyển đổi thành giọng nói - *bắt buộc*
-  - `voice_name`: Tên giọng đọc (mặc định: 'ja-JP-NanamiNeural') - *tùy chọn*
-- **Phản hồi**: File âm thanh MP3
-- **Response Headers**:
-  - `Content-Type`: audio/mp3
-  - `Content-Disposition`: attachment; filename="tts-[timestamp].mp3"
+- **Description**: Japanese pronunciation assessment based on sound and reference text
+- **Content-Type**: `multipart/form-data` or `application/json` (if using base64)
+- **Parameters**:
+	- **File Usage**:
+		- `audio`: Audio file (WAV) - *required*
+		- `reference_text`: Japanese Reference Text - *Required*
+		- `user_id`: User ID - *optional*
+	- **Using base64**:
+		- `audio_base64`: Base64 string of audio - *required*
+		- `reference_text`: Japanese Reference Text - *Required*
+		- `user_id`: User ID - *optional*
+		- **Headers**:
+			- `X-Audio-Format`: `base64` - *required*
+			- `Content-Type`: `application/json` - *required*
+- **Limit**: Maximum file size 10MB
+- **Response**: Detailed review results
+- **Example response**:
 
-### POST /api/intent-recognition
-
-- **Mô tả**: Nhận dạng ý định từ văn bản hoặc âm thanh
-- **Content-Type**: multipart/form-data hoặc application/json
-- **Tham số**:
-  - **Đầu vào là văn bản** (application/json):
-    - `text`: Văn bản cần nhận dạng ý định - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-  - **Đầu vào là âm thanh** (multipart/form-data):
-    - `audio`: File âm thanh (WAV) - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-  - **Đầu vào là âm thanh base64** (application/json):
-    - `audio_base64`: Chuỗi base64 của âm thanh - *bắt buộc*
-    - `user_id`: ID người dùng - *tùy chọn*
-    - **Headers**:
-      - `X-Audio-Format`: `base64` - *bắt buộc*
-- **Giới hạn**: Kích thước file tối đa 10MB (đối với đầu vào âm thanh)
-- **Phản hồi**: Kết quả nhận dạng ý định
-- **Ví dụ phản hồi**:
-  ```json
-  {
-    "user_id": "test-user-001",
-    "query": "こんにちは、初めまして。お願いします。",
-    "intent": {
-      "top": "Greeting",
-      "confidence": 0.5
-    },
-    "intents": {
-      "Greeting": 2,
-      "Request": 1,
-      "Farewell": 0,
-      "Question": 0,
-      "Affirmation": 0,
-      "Negation": 0,
-      "Opinion": 0
-    },
-    "entities": [],
-    "timestamp": "2025-05-18T07:45:12.456Z"
-  }
-  ```
-
-### WebSocket Endpoint (/) - Nhận dạng giọng nói thời gian thực
-
-- **Mô tả**: Kết nối WebSocket để nhận dạng giọng nói theo thời gian thực
-- **Giao thức**: WebSocket (ws:// hoặc wss://)
-- **Quy trình**:
-  1. Kết nối tới WebSocket endpoint
-  2. Gửi lệnh bắt đầu: `{"command": "start"}`
-  3. Gửi dữ liệu âm thanh dưới dạng binary data
-  4. Nhận kết quả nhận dạng theo thời gian thực
-  5. Gửi lệnh dừng: `{"command": "stop"}`
-- **Định dạng tin nhắn từ server**:
-  ```json
-  {
-    "type": "recognition",
-    "result": {
-      "type": "recognizing", // hoặc "recognized"
-      "text": "こんにちは",
-      "isFinal": false // true nếu là kết quả cuối cùng
+```json
+{
+  "user_id": "test-user-001",
+  "reference_text": "こんにちは、私の名前は田中です。",
+  "transcription": {
+    "fromRecognition": "こんにちは、私の名前は田中です。",
+    "fromAssessment": "こんにちは、私の名前は田中です。"
+  },
+  "jlpt_level": "N3",
+  "pronunciation_scores": {
+    "accuracy": 85.7,
+    "fluency": 79.3,
+    "completeness": 95.0,
+    "pronunciation": 82.5,
+    "prosody": 75.2
+  },
+  "speech_rate": {
+    "words_per_minute": 120,
+    "assessment": {
+      "rating": "good",
+      "feedback": "Tốc độ nói phù hợp, gần với tốc độ nói tự nhiên của người bản xứ."
     }
+  },
+  "word_stress": {
+    "overall_score": 76.5,
+    "details": [...]
+  },
+  "analysis": {
+    "strengths": ["Phát âm chính xác các từ vựng", "Nói đầy đủ nội dung so với văn bản tham chiếu"],
+    "weaknesses": ["Ngữ điệu chưa tự nhiên, còn đơn điệu"],
+    "improvement_suggestions": ["Nghe và bắt chước ngữ điệu của người bản xứ, tập trung vào cao độ và trọng âm"]
+  },
+  "word_details": [...],
+  "phoneme_details": [...],
+  "benchmark_comparison": {
+    "accuracy_vs_benchmark": "5.70",
+    "fluency_vs_benchmark": "-0.70",
+    "overall_vs_benchmark": "2.50"
+  },
+  "timestamp": "2025-05-18T07:31:28.123Z"
+}
+```
+
+### POST `/api/text-to-speech`
+
+- **Description: Text-to-speech conversion**
+- **Content-Type**: `application/json`
+- **Parameters**:
+	- `text`: Text that needs to be converted to speech - *required*
+	- `voice_name`: Voice name (default: 'ja-JP-NanamiNeural') – *optional*
+- **Response**: MP3 audio file
+- **Response Headers**:
+	- `Content-Type`: `audio/mp3`
+	- `Content-Disposition`: attachment; filename="tts-\[timestamp\].mp3"
+
+### POST `/api/intent-recognition`
+
+- **Description**: Identify intent from text or audio
+- **Content-Type**: `multipart/form-data` or `application/json`
+- **Parameters**:
+	- **The input is text** (application/json):
+		- `text`: Text that needs intent identification - *required*
+		- `user_id`: User ID - *optional*
+	- **Input is audio** (multipart/form-data):
+		- `audio`: Audio file (WAV) - *required*
+		- `user_id`: User ID - *optional*
+	- **The input is base64** audio (application/json):
+		- `audio_base64`: Base64 string of audio - *required*
+		- `user_id`: User ID - *optional*
+		- **Headers**:
+			- `X-Audio-Format`: `base64` - *required*
+- **Limit**: Maximum file size of 10MB (for audio input)
+- **Response**: Intent Recognition Results
+- **Example response**:
+
+```json
+{
+  "user_id": "test-user-001",
+  "query": "こんにちは、初めまして。お願いします。",
+  "intent": {
+    "top": "Greeting",
+    "confidence": 0.5
+  },
+  "intents": {
+    "Greeting": 2,
+    "Request": 1,
+    "Farewell": 0,
+    "Question": 0,
+    "Affirmation": 0,
+    "Negation": 0,
+    "Opinion": 0
+  },
+  "entities": [],
+  "timestamp": "2025-05-18T07:45:12.456Z"
+}
+```
+
+### WebSocket Endpoint - Real-Time Voice Recognition
+
+- **Description**: WebSocket connection for real-time speech recognition
+- **Protocol**: WebSocket (ws:// or wss://)
+- **Process**:
+	1. Connecting to a WebSocket endpoint
+	2. Send the start command: `{"command": "start"}`
+	3. Submit audio data as binary data
+	4. Get real-time recognition results
+	5. Send stop command: `{"command": "stop"}`
+- **Message format from the server**:
+
+```json
+{
+  "type": "recognition",
+  "result": {
+    "type": "recognizing", // or "recognized"
+    "text": "こんにちは",
+    "isFinal": false // true if final result
   }
-  ```
+}
+```
 
 ## JLPT Level Mapping
 
-Dịch vụ tự động xác định cấp độ JLPT dựa trên điểm phát âm:
+The service automatically determines the JLPT level based on pronunciation scores:
 
-| JLPT Level | Điểm phát âm |
-|------------|--------------|
-| N1         | 90-100       |
-| N2         | 80-89        |
-| N3         | 70-79        |
-| N4         | 60-69        |
-| N5         | <60          |
+| JLPT Level | Pronunciation Points |
+| ---------- | -------------------- |
+| N1         | 90-100               |
+| N2         | 80-89                |
+| N3         | 70-79                | 
+| N4         | 60-69                |
+| N5         | <60                  |
 
-## Cài đặt và chạy
+## Install and run
 
-### Cài đặt thủ công
+### Requirements
+
+- Node.js 14+
+- Azure Speech Service account
+- Internet connection to use the Azure Speech SDK
+
+### Manual Installation
+
 1. Clone repository
-2. Cài đặt dependencies: `npm install`
-3. Cấu hình môi trường: Tạo file `.env` với các biến:
-   ```
-   SPEECH_KEY=your_azure_speech_key
-   SPEECH_REGION=your_azure_region
-   API_KEY=your_api_authentication_key
-   PORT=3000 (optional)
-   ```
-4. Chạy dịch vụ: `node server.js` hoặc `npm start`
+2. Install dependencies: `npm install`
+3. Configure the environment: Create an `.env` file with the following variables:
 
-### Triển khai với Docker
-1. Đảm bảo Docker và Docker Compose đã được cài đặt
-2. Tạo file `.env` với các biến môi trường cần thiết
-3. Chạy: `docker-compose up -d`
+```
+SPEECH_KEY=your_azure_speech_key
+SPEECH_REGION=your_azure_region
+API_KEY=your_api_authentication_key
+PORT=3000 (optional)
+```
 
-### Cấu hình SSL/HTTPS
-Sử dụng script `setup-ssl.sh` để thiết lập SSL với Let's Encrypt:
+4. Run the service: `node server.js` or `npm start`
+
+### Deploy with Docker
+
+1. Make sure Docker and Docker Compose are installed
+2. Create an `.env` file with the necessary environment variables
+3. Run: `docker-compose up -d`
+
+### SSL/HTTPS Configuration
+
+Use `setup-ssl.sh` script to set up SSL with Let's Encrypt:
+
 ```bash
 ./setup-ssl.sh your-domain.com
 ```
 
-## Ví dụ sử dụng API
+## Examples of using APIs with cURL
 
-### cURL
+### Convert speech to text (using file)
 
-#### Chuyển đổi giọng nói thành văn bản (sử dụng file)
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -248,7 +265,8 @@ curl -X POST \
   https://your-domain.com/api/speech-to-text
 ```
 
-#### Đánh giá phát âm (sử dụng file)
+### Evaluation of pronunciation (using file)
+
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -258,7 +276,8 @@ curl -X POST \
   https://your-domain.com/api/pronunciation-assessment
 ```
 
-#### Đánh giá phát âm (sử dụng base64)
+### Pronunciation evaluation (using base64)
+
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -272,7 +291,8 @@ curl -X POST \
   https://your-domain.com/api/pronunciation-assessment
 ```
 
-#### Chuyển đổi văn bản thành giọng nói
+### Convert text to speech
+
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -282,7 +302,8 @@ curl -X POST \
   https://your-domain.com/api/text-to-speech
 ```
 
-#### Nhận dạng ý định từ văn bản
+### Identifying intents from text
+
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -291,7 +312,8 @@ curl -X POST \
   https://your-domain.com/api/intent-recognition
 ```
 
-#### Nhận dạng ý định từ âm thanh base64
+### Identify intents from base64 audio
+
 ```bash
 curl -X POST \
   -H "X-API-Key: your_api_key" \
@@ -304,15 +326,9 @@ curl -X POST \
   https://your-domain.com/api/intent-recognition
 ```
 
-## Yêu cầu
+## API Testing
 
-- Node.js 14+
-- Tài khoản Azure Speech Service
-- Kết nối internet để sử dụng Azure Speech SDK
-
-## Kiểm thử API
-
-Sử dụng script `test-api.js` để kiểm thử các API endpoints:
+Use `test-api.js` script to test API endpoints:
 
 ```bash
 # Kiểm thử tất cả API
@@ -327,7 +343,8 @@ node test-api.js --intent        # Intent Recognition
 node test-api.js --realtime      # Real-time Speech Recognition (WebSocket)
 ```
 
-## Tài nguyên
+## References
 
-- [Tài liệu Azure Speech SDK](https://learn.microsoft.com/en-us/javascript/api/microsoft-cognitiveservices-speech-sdk/)
-- [Hướng dẫn Pronunciation Assessment API](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-speech-to-text#pronunciation-assessment-parameters)
+- [Azure Speech SDK documentation](https://learn.microsoft.com/en-us/javascript/api/microsoft-cognitiveservices-speech-sdk/)
+- [Pronunciation Assessment API Guide](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-speech-to-text#pronunciation-assessment-parameters)
+
