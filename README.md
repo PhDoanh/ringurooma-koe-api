@@ -331,10 +331,10 @@ curl -X POST \
 Use `test-api.js` script to test API endpoints:
 
 ```bash
-# Kiểm thử tất cả API
+# Test all APIs
 node test-api.js --all
 
-# Kiểm thử từng API riêng biệt
+# Test each API separately
 node test-api.js --stt           # Speech to Text
 node test-api.js --pronunciation # Pronunciation Assessment
 node test-api.js --pronunciation-base64 # Pronunciation Assessment với base64
